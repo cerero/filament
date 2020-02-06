@@ -1,0 +1,86 @@
+material {
+    name : bloomDownsample,
+    parameters : [
+        {
+            type : sampler2d,
+            name : source,
+            precision: medium
+        },
+        {
+            type : float4,
+            name : resolution,
+            precision: high
+        },
+        {
+            type : float,
+            name : level
+        }
+    ],
+    variables : [
+        vertex
+    ],
+    domain : postprocess,
+    depthWrite : false,
+    depthCulling : false
+}
+
+vertex {
+    void postProcessVertex(inout PostProcessVertexInputs postProcess) {
+        postProcess.vertex.xy = postProcess.normalizedUV;
+    }
+}
+
+fragment {
+
+    vec3 Tonemap_ReinhardWeighted(const vec3 x, float weight) {
+        // Weighted Reinhard tone-mapping operator designed for post-processing
+        // This tone-mapping operator is invertible
+        if (materialParams.level < 0.0) {
+            return x * (weight / (max3(x) + 1.0));
+        } else {
+            return x * weight;
+        }
+    }
+
+    vec3 Tonemap_ReinhardWeighted_Invert(const vec3 x) {
+        // Inverse Reinhard tone-mapping operator, designed to be used in conjunction
+        // with the weighted Reinhard tone-mapping operator
+        if (materialParams.level < 0.0) {
+            return x / (1.0 - max3(x));
+        } else {
+            return x;
+        }
+    }
+
+    void postProcess(inout PostProcessInputs postProcess) {
+        float lod = materialParams.level;
+        highp vec2 uv = variable_vertex.xy;
+        highp float du = materialParams.resolution.z;
+        highp float dv = materialParams.resolution.w;
+
+        vec3 c = textureLod(materialParams_source, uv, lod).rgb;
+
+        vec3 l = textureLod(materialParams_source, uv + vec2(-du,  0.0), lod).rgb;
+        vec3 t = textureLod(materialParams_source, uv + vec2( 0.0, -dv), lod).rgb;
+        vec3 r = textureLod(materialParams_source, uv + vec2( du,  0.0), lod).rgb;
+        vec3 b = textureLod(materialParams_source, uv + vec2( 0.0,  dv), lod).rgb;
+
+        vec3 lt = textureLod(materialParams_source, uv + 0.5 * vec2(-du, -dv), lod).rgb;
+        vec3 rt = textureLod(materialParams_source, uv + 0.5 * vec2( du, -dv), lod).rgb;
+        vec3 rb = textureLod(materialParams_source, uv + 0.5 * vec2( du,  dv), lod).rgb;
+        vec3 lb = textureLod(materialParams_source, uv + 0.5 * vec2(-du,  dv), lod).rgb;
+
+        vec3 lt2 = textureLod(materialParams_source, uv + vec2(-du, -dv), lod).rgb;
+        vec3 rt2 = textureLod(materialParams_source, uv + vec2( du, -dv), lod).rgb;
+        vec3 rb2 = textureLod(materialParams_source, uv + vec2( du,  dv), lod).rgb;
+        vec3 lb2 = textureLod(materialParams_source, uv + vec2(-du,  dv), lod).rgb;
+
+        vec3 C =  (lt + rt + rb + lb) * 0.5  ;
+        vec3 LT = ( c + l + lt2 + t ) * 0.125;
+        vec3 RT = ( c + t + rt2 + r ) * 0.125;
+        vec3 RB = ( c + r + rb2 + b ) * 0.125;
+        vec3 LB = ( c + b + lb2 + l ) * 0.125;
+
+        postProcess.color.rgb = (C + LT + RT + RB + LB) * 0.25;
+    }
+}

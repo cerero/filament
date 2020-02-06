@@ -1,0 +1,53 @@
+material {
+    name : bloomUpsample,
+    parameters : [
+        {
+            type : sampler2d,
+            name : source,
+            precision: medium
+        },
+        {
+            type : float4,
+            name : resolution,
+            precision: high
+        },
+        {
+            type : float,
+            name : level
+        }
+    ],
+    variables : [
+        vertex
+    ],
+    domain : postprocess,
+    depthWrite : false,
+    depthCulling : false
+}
+
+vertex {
+    void postProcessVertex(inout PostProcessVertexInputs postProcess) {
+        postProcess.vertex.xy = postProcess.normalizedUV;
+    }
+}
+
+fragment {
+    void postProcess(inout PostProcessInputs postProcess) {
+        // TODO
+        float lod = materialParams.level;
+        highp vec2 uv = variable_vertex.xy;
+//        highp float du = materialParams.resolution.z;
+//        highp float dv = materialParams.resolution.w;
+
+        vec3 c  = textureLod(materialParams_source, uv, lod).rgb;
+//        vec3 l  = 0.125 * textureLod(materialParams_source, uv + vec2(-du,  0.0), lod).rgb;
+//        vec3 t  = 0.125 * textureLod(materialParams_source, uv + vec2( 0.0, -dv), lod).rgb;
+//        vec3 r  = 0.125 * textureLod(materialParams_source, uv + vec2( du,  0.0), lod).rgb;
+//        vec3 b  = 0.125 * textureLod(materialParams_source, uv + vec2( 0.0,  dv), lod).rgb;
+//        vec3 lt = 0.125 * textureLod(materialParams_source, uv + vec2(-du, -dv), lod).rgb;
+//        vec3 rt = 0.125 * textureLod(materialParams_source, uv + vec2( du, -dv), lod).rgb;
+//        vec3 rb = 0.125 * textureLod(materialParams_source, uv + vec2( du,  dv), lod).rgb;
+//        vec3 lb = 0.125 * textureLod(materialParams_source, uv + vec2(-du,  dv), lod).rgb;
+
+        postProcess.color.rgb = c;
+    }
+}

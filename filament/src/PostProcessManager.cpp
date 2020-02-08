@@ -199,7 +199,7 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::toneMapping(FrameGraph& fg,
         FrameGraphRenderTargetHandle rt;
     };
 
-    float bloom = 0.04f;
+    float bloom = 0.10f;
 
     auto bloomBlur = bloomPass(fg, input, TextureFormat::R11F_G11F_B10F);
 

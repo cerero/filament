@@ -31,8 +31,6 @@ vertex {
 }
 
 fragment {
-    void placate_ide() {}
-
     void postProcess(inout PostProcessInputs postProcess) {
         float lod = materialParams.level;
         highp vec2 uv = variable_vertex.xy;

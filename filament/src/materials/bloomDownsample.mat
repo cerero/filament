@@ -31,26 +31,16 @@ vertex {
 }
 
 fragment {
-    vec3 Tonemap_Reinhard(const vec3 rgb, const float weight) {
-        if (materialParams.level >= 1.0) {
-            return rgb * weight;
-        }
-        // Weighted Reinhard tone-mapping operator designed for post-processing
-        // This tone-mapping operator is invertible
-        float luma = max3(rgb);
-        float tonemap = (weight / (1.0 + luma));
-        return rgb * tonemap;
+    vec3 box4x4(vec3 s0, vec3 s1, vec3 s2, vec3 s3) {
+        return (s0 + s1 + s2 + s3) * 0.25;
     }
 
-    vec3 Tonemap_Reinhard_Invert(const vec3 rgb) {
-        if (materialParams.level >= 1.0) {
-            return rgb;
-        }
-        // Inverse Reinhard tone-mapping operator, designed to be used in conjunction
-        // with the weighted Reinhard tone-mapping operator
-        float luma = max3(rgb);
-        float tonemap = (1.0 / (1.0 - luma));
-        return rgb * tonemap;
+    vec3 box4x4Reinhard(vec3 s0, vec3 s1, vec3 s2, vec3 s3) {
+        float w0 = 1.0 / (1.0 + max3(s0));
+        float w1 = 1.0 / (1.0 + max3(s1));
+        float w2 = 1.0 / (1.0 + max3(s2));
+        float w3 = 1.0 / (1.0 + max3(s3));
+        return (s0 * w0 + s1 * w1 + s2 * w2 + s3 * w3) * (1.0 / (w0 + w1 + w2 + w3));
     }
 
     void postProcess(inout PostProcessInputs postProcess) {
@@ -59,6 +49,11 @@ fragment {
         highp float du = materialParams.resolution.z;
         highp float dv = materialParams.resolution.w;
 
+        vec3 lt = textureLod(materialParams_source, uv + 0.5 * vec2(-du, -dv), lod).rgb;
+        vec3 rt = textureLod(materialParams_source, uv + 0.5 * vec2( du, -dv), lod).rgb;
+        vec3 rb = textureLod(materialParams_source, uv + 0.5 * vec2( du,  dv), lod).rgb;
+        vec3 lb = textureLod(materialParams_source, uv + 0.5 * vec2(-du,  dv), lod).rgb;
+
         vec3 c = textureLod(materialParams_source, uv, lod).rgb;
 
         vec3 l = textureLod(materialParams_source, uv + vec2(-du,  0.0), lod).rgb;
@@ -66,31 +61,30 @@ fragment {
         vec3 r = textureLod(materialParams_source, uv + vec2( du,  0.0), lod).rgb;
         vec3 b = textureLod(materialParams_source, uv + vec2( 0.0,  dv), lod).rgb;
 
-        vec3 lt = textureLod(materialParams_source, uv + 0.5 * vec2(-du, -dv), lod).rgb;
-        vec3 rt = textureLod(materialParams_source, uv + 0.5 * vec2( du, -dv), lod).rgb;
-        vec3 rb = textureLod(materialParams_source, uv + 0.5 * vec2( du,  dv), lod).rgb;
-        vec3 lb = textureLod(materialParams_source, uv + 0.5 * vec2(-du,  dv), lod).rgb;
-
         vec3 lt2 = textureLod(materialParams_source, uv + vec2(-du, -dv), lod).rgb;
         vec3 rt2 = textureLod(materialParams_source, uv + vec2( du, -dv), lod).rgb;
         vec3 rb2 = textureLod(materialParams_source, uv + vec2( du,  dv), lod).rgb;
         vec3 lb2 = textureLod(materialParams_source, uv + vec2(-du,  dv), lod).rgb;
 
-        // four h4x4 boxes
-        vec3 C2 = (lt + rt + rb +lb) * 0.25;
-        vec3 LT2 = (c + l + t + lt2) * 0.25;
-        vec3 RT2 = (c + r + t + rt2) * 0.25;
-        vec3 RB2 = (c + r + b + rb2) * 0.25;
-        vec3 LB2 = (c + l + b + lb2) * 0.25;
+        // five h4x4 boxes
+        vec3 c0, c1;
+        if (materialParams.level > 0.5) {
+            // common case
+            c0  = box4x4(lt, rt, rb, lb);
+            c1  = box4x4(c, l, t, lt2);
+            c1 += box4x4(c, r, t, rt2);
+            c1 += box4x4(c, r, b, rb2);
+            c1 += box4x4(c, l, b, lb2);
+        } else {
+            // only first level downsampling
+            c0  = box4x4Reinhard(lt, rt, rb, lb);
+            c1  = box4x4Reinhard(c, l, t, lt2);
+            c1 += box4x4Reinhard(c, r, t, rt2);
+            c1 += box4x4Reinhard(c, r, b, rb2);
+            c1 += box4x4Reinhard(c, l, b, lb2);
+        }
 
-        // weighted average of the four boxes
-        vec3 RGB = vec3(0.0);
-        RGB += Tonemap_Reinhard(C2,  0.5);
-        RGB += Tonemap_Reinhard(LT2, 0.125);
-        RGB += Tonemap_Reinhard(RT2, 0.125);
-        RGB += Tonemap_Reinhard(RB2, 0.125);
-        RGB += Tonemap_Reinhard(LB2, 0.125);
-
-        postProcess.color.rgb = Tonemap_Reinhard_Invert(RGB);
+        // weighted average of the five boxes
+        postProcess.color.rgb = c0 * 0.5 + c1 * 0.125;
     }
 }

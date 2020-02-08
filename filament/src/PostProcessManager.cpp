@@ -185,7 +185,7 @@ void PostProcessManager::terminate(DriverApi& driver) noexcept {
 
 // ------------------------------------------------------------------------------------------------
 
-FrameGraphId <FrameGraphTexture> PostProcessManager::toneMapping(FrameGraph& fg,
+FrameGraphId<FrameGraphTexture> PostProcessManager::toneMapping(FrameGraph& fg,
         FrameGraphId<FrameGraphTexture> input, TextureFormat outFormat,
         bool dithering, bool translucent, bool fxaa) noexcept {
 
@@ -224,7 +224,7 @@ FrameGraphId <FrameGraphTexture> PostProcessManager::toneMapping(FrameGraph& fg,
                 pInstance->setParameter("colorBuffer", colorTexture, { /* shader uses texelFetch */ });
                 pInstance->setParameter("bloomBuffer", bloomTexture, {
                         .filterMag = SamplerMagFilter::LINEAR,
-                        .filterMin = SamplerMinFilter::LINEAR /* always read base level in shader, maybe nearest is good enough too */
+                        .filterMin = SamplerMinFilter::LINEAR_MIPMAP_NEAREST /* always read base level in shader, maybe nearest is good enough too */
                 });
                 pInstance->setParameter("dithering", dithering);
                 pInstance->setParameter("bloom", bloom);
@@ -970,13 +970,13 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::bloomPass(FrameGraph& fg,
                 }
 
                 // upsample phase
-                PostProcessMaterial const& bloomUpsample = mBloomDownsample;
+                PostProcessMaterial const& bloomUpsample = mBloomUpsample;
                 mi = bloomUpsample.getMaterialInstance();
                 pipeline.program = bloomUpsample.getProgram();
                 pipeline.rasterState = bloomUpsample.getMaterial()->getRasterState();
                 pipeline.scissor = mi->getScissor();
-//                pipeline.rasterState.blendFunctionSrcRGB = BlendFunction::ONE;
-//                pipeline.rasterState.blendFunctionDstRGB = BlendFunction::ONE;
+                pipeline.rasterState.blendFunctionSrcRGB = BlendFunction::ONE;
+                pipeline.rasterState.blendFunctionDstRGB = BlendFunction::ONE;
 
                 mi->use(driver);
 

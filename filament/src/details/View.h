@@ -243,6 +243,14 @@ public:
         return mAmbientOcclusionOptions;
     }
 
+    void setBloomOptions(BloomOptions options) noexcept {
+        mBloomOptions = options;
+    }
+
+    BloomOptions getBloomOptions() const noexcept {
+        return mBloomOptions;
+    }
+
     Range const& getVisibleRenderables() const noexcept {
         return mVisibleRenderables;
     }
@@ -339,6 +347,7 @@ private:
     bool mHasPostProcessPass = true;
     AmbientOcclusion mAmbientOcclusion = AmbientOcclusion::NONE;
     AmbientOcclusionOptions mAmbientOcclusionOptions{};
+    BloomOptions mBloomOptions;
 
     using duration = std::chrono::duration<float, std::milli>;
     DynamicResolutionOptions mDynamicResolution;

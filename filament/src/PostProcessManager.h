@@ -46,7 +46,8 @@ public:
 
     FrameGraphId<FrameGraphTexture> toneMapping(FrameGraph& fg,
             FrameGraphId<FrameGraphTexture> input,
-            backend::TextureFormat outFormat, bool dithering, bool translucent, bool fxaa) noexcept;
+            backend::TextureFormat outFormat, bool dithering, bool translucent, bool fxaa,
+            View::BloomOptions bloomOptions) noexcept;
 
     FrameGraphId<FrameGraphTexture> fxaa(FrameGraph& fg,
             FrameGraphId<FrameGraphTexture> input, backend::TextureFormat outFormat,
@@ -99,7 +100,8 @@ private:
             FrameGraphId<FrameGraphTexture> depth, math::int2 axis) noexcept;
 
     FrameGraphId<FrameGraphTexture> bloomPass(FrameGraph& fg,
-                                              FrameGraphId<FrameGraphTexture> input, backend::TextureFormat outFormat) noexcept;
+            FrameGraphId<FrameGraphTexture> input, backend::TextureFormat outFormat,
+            View::BloomOptions bloomOptions) noexcept;
 
 
     class PostProcessMaterial {

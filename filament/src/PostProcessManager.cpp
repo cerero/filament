@@ -65,6 +65,12 @@ const uint8_t kBlueNoise[] = {
     0x49, 0xbf, 0x09, 0xd2, 0x2b, 0x60, 0x07, 0x88, 0xe7, 0x50, 0x0a, 0x7c, 0xe1, 0xcf, 0x9b, 0xb7
 };
 
+static constexpr uint8_t kBloomLevels = 6u;
+static constexpr uint32_t kBloomMaxResolution = 1024;
+static constexpr uint32_t kBloomMinResolution = 256;
+static_assert(kBloomLevels >= 3, "We require at least 3 bloom levels");
+static_assert(kBloomMinResolution >= 1u<<kBloomLevels, "Bloom minimum resolution is too low");
+
 // ------------------------------------------------------------------------------------------------
 
 PostProcessManager::PostProcessMaterial::PostProcessMaterial(FEngine& engine,
@@ -187,7 +193,7 @@ void PostProcessManager::terminate(DriverApi& driver) noexcept {
 
 FrameGraphId<FrameGraphTexture> PostProcessManager::toneMapping(FrameGraph& fg,
         FrameGraphId<FrameGraphTexture> input, TextureFormat outFormat,
-        bool dithering, bool translucent, bool fxaa) noexcept {
+        bool dithering, bool translucent, bool fxaa, View::BloomOptions bloomOptions) noexcept {
 
     FEngine& engine = mEngine;
     Handle<HwRenderPrimitive> const& fullScreenRenderPrimitive = engine.getFullScreenRenderPrimitive();
@@ -199,9 +205,13 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::toneMapping(FrameGraph& fg,
         FrameGraphRenderTargetHandle rt;
     };
 
-    float bloom = 0.10f;
+    FrameGraphId<FrameGraphTexture> bloomBlur;
 
-    auto bloomBlur = bloomPass(fg, input, TextureFormat::R11F_G11F_B10F);
+    float bloom = 0.0f;
+    if (bloomOptions.enabled) {
+        bloom = clamp(bloomOptions.strength, 0.0f, 1.0f);
+        bloomBlur = bloomPass(fg, input, TextureFormat::R11F_G11F_B10F, bloomOptions);
+    }
 
     auto& ppToneMapping = fg.addPass<PostProcessToneMapping>("tonemapping",
             [&](FrameGraph::Builder& builder, PostProcessToneMapping& data) {
@@ -213,6 +223,11 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::toneMapping(FrameGraph& fg,
                         .format = outFormat
                 });
                 data.rt = builder.createRenderTarget(data.output);
+
+                if (!bloomBlur.isValid()) {
+                    // we need a dummy texture
+                    bloomBlur = builder.createTexture("dummy", {});
+                }
                 data.bloom = builder.sample(bloomBlur);
             },
             [=](FrameGraphPassResources const& resources,
@@ -224,10 +239,10 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::toneMapping(FrameGraph& fg,
                 pInstance->setParameter("colorBuffer", colorTexture, { /* shader uses texelFetch */ });
                 pInstance->setParameter("bloomBuffer", bloomTexture, {
                         .filterMag = SamplerMagFilter::LINEAR,
-                        .filterMin = SamplerMinFilter::LINEAR_MIPMAP_NEAREST /* always read base level in shader, maybe nearest is good enough too */
+                        .filterMin = SamplerMinFilter::LINEAR /* always read base level in shader, maybe nearest is good enough too */
                 });
                 pInstance->setParameter("dithering", dithering);
-                pInstance->setParameter("bloom", bloom);
+                pInstance->setParameter("bloom", bloom / float(kBloomLevels));
                 pInstance->setParameter("fxaa", fxaa);
                 pInstance->commit(driver);
 
@@ -888,36 +903,43 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::gaussianBlurPass(FrameGraph&
 }
 
 FrameGraphId<FrameGraphTexture> PostProcessManager::bloomPass(FrameGraph& fg,
-                                                              FrameGraphId<FrameGraphTexture> input, backend::TextureFormat outFormat) noexcept {
+        FrameGraphId<FrameGraphTexture> input, backend::TextureFormat outFormat,
+        View::BloomOptions bloomOptions) noexcept {
 
     Handle<HwRenderPrimitive> fullScreenRenderPrimitive = mEngine.getFullScreenRenderPrimitive();
-
-    static constexpr uint8_t kLevels = 6u;
 
     struct BloomPassData {
         FrameGraphId<FrameGraphTexture> in;
         FrameGraphId<FrameGraphTexture> out;
-        FrameGraphRenderTargetHandle outRT[kLevels];
-        uint8_t levels;
+        FrameGraphRenderTargetHandle outRT[kBloomLevels];
     };
 
     auto& bloomPass = fg.addPass<BloomPassData>("Gaussian Blur Passes",
             [&](FrameGraph::Builder& builder, auto& data) {
-                data.levels = kLevels;
                 auto const& desc = builder.getDescriptor(input);
 
                 data.in = builder.sample(input);
 
-                FrameGraphTexture::Descriptor ddd = {
-                        .width = (desc.width + 1) / 2,
-                        .height = (desc.height + 1) / 2,
-                        .levels = data.levels,
+                // Figure out a good size for the bloom buffer. We pick the major axis lower
+                // power of two, and scale the minor axis accordingly.
+                uint32_t width = desc.width;
+                uint32_t height = desc.height;
+                uint32_t& major = width > height ? width : height;
+                uint32_t& minor = width < height ? width : height;
+                uint32_t newMajor = clamp(1u << (31u - utils::clz(uint32_t(major))),
+                        kBloomMinResolution, std::min(kBloomMaxResolution, bloomOptions.maxResolution));
+                minor = minor * uint64_t(newMajor) / major;
+                major = newMajor;
+
+                data.out = builder.createTexture("Bloom Texture", {
+                        .width = width,
+                        .height = height,
+                        .levels = kBloomLevels,
                         .format = outFormat
-                };
-                data.out = builder.createTexture("Bloom Texture", ddd);
+                });
                 data.out = builder.write(builder.sample(data.out));
 
-                for (size_t i = 0; i < kLevels; i++) {
+                for (size_t i = 0; i < kBloomLevels; i++) {
                     data.outRT[i] = builder.createRenderTarget("Bloom target", {
                             .attachments = {{ data.out, uint8_t(i) }, {}}
                     }, TargetBufferFlags::NONE);
@@ -947,7 +969,7 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::bloomPass(FrameGraph& fg,
                 mi->setParameter("level", 0.0f);
 
                 // downsample phase
-                for (size_t i = 0; i < data.levels; i++) {
+                for (size_t i = 0; i < kBloomLevels; i++) {
                     auto hwOutRT = resources.getRenderTarget(data.outRT[i]);
 
                     auto w = FTexture::valueForLevel(i, outDesc.width);
@@ -980,7 +1002,7 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::bloomPass(FrameGraph& fg,
 
                 mi->use(driver);
 
-                for (size_t i = data.levels - 1; i >= 1; i--) {
+                for (size_t i = kBloomLevels - 1; i >= 1; i--) {
                     auto hwDstRT = resources.getRenderTarget(data.outRT[i - 1]);
                     hwDstRT.params.flags.discardStart = TargetBufferFlags::NONE; // because we'll blend
                     hwDstRT.params.flags.discardEnd = TargetBufferFlags::NONE;

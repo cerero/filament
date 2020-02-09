@@ -62,6 +62,13 @@ class UTILS_PUBLIC View : public FilamentAPI {
 public:
     using TargetBufferFlags = backend::TargetBufferFlags;
 
+    enum class QualityLevel : int8_t {
+        LOW,
+        MEDIUM,
+        HIGH,
+        ULTRA
+    };
+
     /**
      * Dynamic resolution can be used to either reach a desired target frame rate
      * by lowering the resolution of a View, or to increase the quality when the
@@ -115,11 +122,11 @@ public:
         bool homogeneousScaling = false;                //!< set to true to force homogeneous scaling
     };
 
-    enum class QualityLevel : int8_t {
-        LOW,
-        MEDIUM,
-        HIGH,
-        ULTRA
+    struct BloomOptions {
+        float strength = 0.1f;                          //!< Between 0.0 and 1.0
+        uint32_t maxResolution = 1024;                  //!< Between 256 and 1024
+        QualityLevel quality = QualityLevel::HIGH;      //!< Quality of bloom effect
+        bool enabled = true;                           //!< enable or disable bloom
     };
 
     /**
@@ -451,6 +458,20 @@ public:
     ToneMapping getToneMapping() const noexcept;
 
     /**
+     * Enables or disables bloom in the post-processing stage. Disabled by default.
+     *
+     * @param bloom options
+     */
+    void setBloomOptions(BloomOptions options) noexcept;
+
+    /**
+     * Queries the bloom options.
+     *
+     * @return the current bloom options for this view.
+     */
+    BloomOptions getBloomOptions() const noexcept;
+
+    /**
      * Enables or disables dithering in the post-processing stage. Enabled by default.
      *
      * @param dithering dithering type
@@ -518,6 +539,7 @@ public:
      * Enables or disables post processing. Enabled by default.
      *
      * Post-processing includes:
+     *  - Bloom
      *  - Tone-mapping & gamma encoding
      *  - Dithering
      *  - MSAA
@@ -529,7 +551,7 @@ public:
      *
      * @param enabled true enables post processing, false disables it.
      *
-     * @see setToneMapping, setAntiAliasing, setDithering, setSampleCount
+     * @see setBloomOptions, setToneMapping, setAntiAliasing, setDithering, setSampleCount
      */
     void setPostProcessingEnabled(bool enabled) noexcept;
 

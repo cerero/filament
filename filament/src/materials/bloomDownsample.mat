@@ -49,22 +49,22 @@ fragment {
         highp float du = materialParams.resolution.z;
         highp float dv = materialParams.resolution.w;
 
+        vec3 c = textureLod(materialParams_source, uv, lod).rgb;
+
         vec3 lt = textureLod(materialParams_source, uv + 0.5 * vec2(-du, -dv), lod).rgb;
         vec3 rt = textureLod(materialParams_source, uv + 0.5 * vec2( du, -dv), lod).rgb;
         vec3 rb = textureLod(materialParams_source, uv + 0.5 * vec2( du,  dv), lod).rgb;
         vec3 lb = textureLod(materialParams_source, uv + 0.5 * vec2(-du,  dv), lod).rgb;
 
-        vec3 c = textureLod(materialParams_source, uv, lod).rgb;
+        vec3 lt2 = textureLod(materialParams_source, uv + vec2(-du, -dv), lod).rgb;
+        vec3 rt2 = textureLod(materialParams_source, uv + vec2( du, -dv), lod).rgb;
+        vec3 rb2 = textureLod(materialParams_source, uv + vec2( du,  dv), lod).rgb;
+        vec3 lb2 = textureLod(materialParams_source, uv + vec2(-du,  dv), lod).rgb;
 
         vec3 l = textureLod(materialParams_source, uv + vec2(-du,  0.0), lod).rgb;
         vec3 t = textureLod(materialParams_source, uv + vec2( 0.0, -dv), lod).rgb;
         vec3 r = textureLod(materialParams_source, uv + vec2( du,  0.0), lod).rgb;
         vec3 b = textureLod(materialParams_source, uv + vec2( 0.0,  dv), lod).rgb;
-
-        vec3 lt2 = textureLod(materialParams_source, uv + vec2(-du, -dv), lod).rgb;
-        vec3 rt2 = textureLod(materialParams_source, uv + vec2( du, -dv), lod).rgb;
-        vec3 rb2 = textureLod(materialParams_source, uv + vec2( du,  dv), lod).rgb;
-        vec3 lb2 = textureLod(materialParams_source, uv + vec2(-du,  dv), lod).rgb;
 
         // five h4x4 boxes
         vec3 c0, c1;

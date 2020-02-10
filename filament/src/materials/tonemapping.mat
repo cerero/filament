@@ -20,7 +20,7 @@ material {
             name : fxaa
         },
         {
-            type : float,
+            type : float2,
             name : bloom
         }
     ],
@@ -56,7 +56,7 @@ fragment {
     vec4 resolve(inout PostProcessInputs postProcess) {
 #if POST_PROCESS_OPAQUE
         vec4 color = vec4(resolveFragment(ivec2(getUV())), 1.0);
-        if (materialParams.bloom > 0.0) {
+        if (materialParams.bloom.x > 0.0) {
             color.rgb  = bloom(postProcess, color.rgb);
         }
         color.rgb  = tonemap(color.rgb);
@@ -67,7 +67,7 @@ fragment {
 #else
         vec4 color = resolveAlphaFragment(ivec2(getUV()));
         color.rgb /= color.a + FLT_EPS;
-        if (materialParams.bloom > 0.0) {
+        if (materialParams.bloom.x > 0.0) {
             color.rgb  = bloom(postProcess, color.rgb);
         }
         color.rgb  = tonemap(color.rgb);

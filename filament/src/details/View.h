@@ -244,6 +244,7 @@ public:
     }
 
     void setBloomOptions(BloomOptions options) noexcept {
+        options.levels = math::clamp(options.levels, uint8_t(3), uint8_t(12));
         mBloomOptions = options;
     }
 

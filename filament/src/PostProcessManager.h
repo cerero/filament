@@ -101,7 +101,7 @@ private:
 
     FrameGraphId<FrameGraphTexture> bloomPass(FrameGraph& fg,
             FrameGraphId<FrameGraphTexture> input, backend::TextureFormat outFormat,
-            View::BloomOptions bloomOptions) noexcept;
+            View::BloomOptions& bloomOptions) noexcept;
 
 
     class PostProcessMaterial {

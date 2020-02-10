@@ -65,11 +65,8 @@ const uint8_t kBlueNoise[] = {
     0x49, 0xbf, 0x09, 0xd2, 0x2b, 0x60, 0x07, 0x88, 0xe7, 0x50, 0x0a, 0x7c, 0xe1, 0xcf, 0x9b, 0xb7
 };
 
-static constexpr uint8_t kBloomLevels = 6u;
-static constexpr uint32_t kBloomMaxResolution = 1024;
-static constexpr uint32_t kBloomMinResolution = 256;
-static_assert(kBloomLevels >= 3, "We require at least 3 bloom levels");
-static_assert(kBloomMinResolution >= 1u<<kBloomLevels, "Bloom minimum resolution is too low");
+static constexpr uint8_t kMaxBloomLevels = 12u;
+static_assert(kMaxBloomLevels >= 3, "We require at least 3 bloom levels");
 
 // ------------------------------------------------------------------------------------------------
 
@@ -239,10 +236,16 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::toneMapping(FrameGraph& fg,
                 pInstance->setParameter("colorBuffer", colorTexture, { /* shader uses texelFetch */ });
                 pInstance->setParameter("bloomBuffer", bloomTexture, {
                         .filterMag = SamplerMagFilter::LINEAR,
-                        .filterMin = SamplerMinFilter::LINEAR /* always read base level in shader, maybe nearest is good enough too */
+                        .filterMin = SamplerMinFilter::LINEAR /* always read base level in shader */
                 });
+
+                float2 bloomParameter{ bloom / float(bloomOptions.levels), 1.0f };
+                if (bloomOptions.blend) {
+                    bloomParameter.y = 1.0f - bloomParameter.x;
+                }
+
                 pInstance->setParameter("dithering", dithering);
-                pInstance->setParameter("bloom", bloom / float(kBloomLevels));
+                pInstance->setParameter("bloom", bloomParameter);
                 pInstance->setParameter("fxaa", fxaa);
                 pInstance->commit(driver);
 
@@ -904,14 +907,14 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::gaussianBlurPass(FrameGraph&
 
 FrameGraphId<FrameGraphTexture> PostProcessManager::bloomPass(FrameGraph& fg,
         FrameGraphId<FrameGraphTexture> input, backend::TextureFormat outFormat,
-        View::BloomOptions bloomOptions) noexcept {
+        View::BloomOptions& bloomOptions) noexcept {
 
     Handle<HwRenderPrimitive> fullScreenRenderPrimitive = mEngine.getFullScreenRenderPrimitive();
 
     struct BloomPassData {
         FrameGraphId<FrameGraphTexture> in;
         FrameGraphId<FrameGraphTexture> out;
-        FrameGraphRenderTargetHandle outRT[kBloomLevels];
+        FrameGraphRenderTargetHandle outRT[kMaxBloomLevels];
     };
 
     auto& bloomPass = fg.addPass<BloomPassData>("Gaussian Blur Passes",
@@ -924,22 +927,36 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::bloomPass(FrameGraph& fg,
                 // power of two, and scale the minor axis accordingly.
                 uint32_t width = desc.width;
                 uint32_t height = desc.height;
+                if (bloomOptions.anamorphism >= 1.0) {
+                    height *= bloomOptions.anamorphism;
+                } else if (bloomOptions.anamorphism < 1.0) {
+                    width *= 1.0f / std::max(bloomOptions.anamorphism, 1.0f / 4096.0f);
+                }
+                // FIXME: compensate for dynamic scaling
                 uint32_t& major = width > height ? width : height;
                 uint32_t& minor = width < height ? width : height;
-                uint32_t newMajor = clamp(1u << (31u - utils::clz(uint32_t(major))),
-                        kBloomMinResolution, std::min(kBloomMaxResolution, bloomOptions.maxResolution));
-                minor = minor * uint64_t(newMajor) / major;
-                major = newMajor;
+                uint32_t newMinor = clamp(bloomOptions.resolution,
+                        1u << bloomOptions.levels, std::min(minor, 1u << kMaxBloomLevels));
+                major = major * uint64_t(newMinor) / minor;
+                minor = newMinor;
+
+                // we might need to adjust the max # of levels
+                const uint8_t maxLevels = static_cast<uint8_t>(std::ilogbf(major) + 1);
+                bloomOptions.levels = std::min(bloomOptions.levels, maxLevels);
+                bloomOptions.levels = std::min(bloomOptions.levels, kMaxBloomLevels);
+
+//                slog.d << desc.width << "x" << desc.height << " -> " << width << "x" << height
+//                        << ", levels=" << +bloomOptions.levels << io::endl;
 
                 data.out = builder.createTexture("Bloom Texture", {
                         .width = width,
                         .height = height,
-                        .levels = kBloomLevels,
+                        .levels = bloomOptions.levels,
                         .format = outFormat
                 });
                 data.out = builder.write(builder.sample(data.out));
 
-                for (size_t i = 0; i < kBloomLevels; i++) {
+                for (size_t i = 0; i < bloomOptions.levels; i++) {
                     data.outRT[i] = builder.createRenderTarget("Bloom target", {
                             .attachments = {{ data.out, uint8_t(i) }, {}}
                     }, TargetBufferFlags::NONE);
@@ -969,7 +986,7 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::bloomPass(FrameGraph& fg,
                 mi->setParameter("level", 0.0f);
 
                 // downsample phase
-                for (size_t i = 0; i < kBloomLevels; i++) {
+                for (size_t i = 0; i < bloomOptions.levels; i++) {
                     auto hwOutRT = resources.getRenderTarget(data.outRT[i]);
 
                     auto w = FTexture::valueForLevel(i, outDesc.width);
@@ -1002,7 +1019,7 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::bloomPass(FrameGraph& fg,
 
                 mi->use(driver);
 
-                for (size_t i = kBloomLevels - 1; i >= 1; i--) {
+                for (size_t i = bloomOptions.levels - 1; i >= 1; i--) {
                     auto hwDstRT = resources.getRenderTarget(data.outRT[i - 1]);
                     hwDstRT.params.flags.discardStart = TargetBufferFlags::NONE; // because we'll blend
                     hwDstRT.params.flags.discardEnd = TargetBufferFlags::NONE;

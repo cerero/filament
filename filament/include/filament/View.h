@@ -122,11 +122,32 @@ public:
         bool homogeneousScaling = false;                //!< set to true to force homogeneous scaling
     };
 
+    /**
+     * Options to control the bloom effetc
+     *
+     * enabled:     Enable or disable the bloom post-processing effect. Disabled by default.
+     * levels:      Number of successive blurs to achieve the blur effect, the minimum is 3 and the
+     *              maximum is 12. This value together with resolution influences the spread of the
+     *              blur effect. This value can be silently reduced to accommodate the original
+     *              image size.
+     * resolution:  Resolution of bloom's the minor axis. The minimum value is 2^levels and the
+     *              the maximum is lower of the original resolution and 4096. This parameter is
+     *              silently clamped to the minimum and maximum.
+     *              It is highly recommended that this value be smaller than the target resolution
+     *              after dynamic resolution is applied (horizontally and vertically).
+     * strength:    how much of the bloom is added to the original image. Between 0 and 1.
+     * blend:       Whether the bloom effect is purely additive (false) or mixed with the original
+     *              image (true).
+     * anamorphism: Bloom's aspect ratio (x/y), for artistic purposes.
+     */
     struct BloomOptions {
-        float strength = 0.1f;                          //!< Between 0.0 and 1.0
-        uint32_t maxResolution = 1024;                  //!< Between 256 and 1024
+        float strength = 0.10f;                         //!< Between 0.0 and 1.0
+        uint32_t resolution = 360;                      //!< Resolution of minor axis (2^levels to 4096)
+        float anamorphism = 1.0f;                       //!< Bloom x/y aspect-ratio (1/32 to 32)
+        uint8_t levels = 6;                             //!< number of blur levels (3 to 12)
         QualityLevel quality = QualityLevel::HIGH;      //!< Quality of bloom effect
-        bool enabled = true;                           //!< enable or disable bloom
+        bool blend = false;                             //!< Use mixed (true) or additive (false) bloom
+        bool enabled = false;                           //!< enable or disable bloom
     };
 
     /**
